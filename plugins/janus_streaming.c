@@ -5704,8 +5704,8 @@ static int janus_streaming_allocate_port_pair(const char *name, const char *medi
 				rtp_range_min, rtp_range_max);
 			break;
 		}
-		int rtp_port = rtp_port_next;
-		int rtcp_port = rtp_port+1;
+		int rtp_port = ports[0] ? ports[0] : rtp_port_next;
+		int rtcp_port = ports[1] ? ports[1] : rtp_port + 1;
 		if((uint32_t)(rtp_port_next + 2UL) < rtp_range_max) {
 			/* Advance to next pair */
 			rtp_port_next += 2;
@@ -5713,6 +5713,7 @@ static int janus_streaming_allocate_port_pair(const char *name, const char *medi
 			rtp_port_next = rtp_range_min;
 			rtp_port_wrap = TRUE;
 		}
+		fprintf(stderr, "%s[%u] %i %i\n", __func__, __LINE__, ports[0], ports[1]);
 		rtp_fd = janus_streaming_create_fd(rtp_port, mcast, iface, NULL, 0, media, media, name, TRUE);
 		if(rtp_fd != -1) {
 			rtcp_fd = janus_streaming_create_fd(rtcp_port, mcast, iface, NULL, 0, media, media, name, TRUE);
@@ -6411,6 +6412,7 @@ static int janus_streaming_rtsp_parse_sdp(const char *buffer, const char *name, 
 		}
 	}
 	/* Parse the SDP now */
+	int port = -1;
 	char pattern[256];
 	g_snprintf(pattern, sizeof(pattern), "m=%s", media);
 	char *m = strstr(buffer, pattern);
@@ -6418,7 +6420,7 @@ static int janus_streaming_rtsp_parse_sdp(const char *buffer, const char *name, 
 		JANUS_LOG(LOG_VERB, "[%s] no media %s...\n", name, media);
 		return -1;
 	}
-	sscanf(m, "m=%*s %*d %*s %d", pt);
+	sscanf(m, "m=%*s %d %*s %d", &port, pt);
 	char *s = strstr(m, "a=control:");
 	if(s == NULL) {
 		JANUS_LOG(LOG_ERR, "[%s] no control for %s...\n", name, media);
@@ -6456,7 +6458,14 @@ static int janus_streaming_rtsp_parse_sdp(const char *buffer, const char *name, 
 		}
 	}
 	/* Bind two adjacent ports for RTP and RTCP */
-	int ports[2];
+	int ports[2] = {0, 0};
+
+	fprintf(stderr, "%s[%u]\n", __func__, __LINE__);
+	if(IN_MULTICAST(ntohl(mcast))) {
+	fprintf(stderr, "%s[%u] %i\n", __func__, __LINE__, port);
+		ports[0] = port;\
+	}
+
 	if(janus_streaming_allocate_port_pair(name, media, mcast, iface, fds, ports)) {
 		JANUS_LOG(LOG_ERR, "[%s] Bind failed for %s...\n", name, media);
 		return -1;
